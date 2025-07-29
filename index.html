@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NitroType Race Tracker</title>
+  <style>
+    * {
+      margin: 0; padding: 0; box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh; color: #333;
+    }
+    .container {
+      max-width: 1200px; margin: 0 auto; padding: 20px;
+    }
+    .header {
+      text-align: center; margin-bottom: 30px; color: white;
+    }
+    .header h1 {
+      font-size: 2.5em; margin-bottom: 10px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+    .search-section {
+      background: white; padding: 25px; border-radius: 15px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2); margin-bottom: 30px;
+    }
+    .search-form {
+      display: flex; gap: 15px; margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .input-group {
+      flex: 1; min-width: 200px;
+    }
+    .input-group label {
+      display: block; margin-bottom: 5px; font-weight: 600; color: #555;
+    }
+    .input-group input,
+    .input-group select {
+      width: 100%; padding: 12px; border: 2px solid #e0e0e0;
+      border-radius: 8px; font-size: 14px;
+      transition: border-color 0.3s;
+    }
+    .input-group input:focus,
+    .input-group select:focus {
+      outline: none; border-color: #667eea;
+    }
+    .btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white; border: none; padding: 12px 25px;
+      border-radius: 8px; cursor: pointer;
+      font-size: 14px; font-weight: 600;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102,126,234,0.4);
+    }
+    .btn:disabled {
+      opacity: 0.6; cursor: not-allowed; transform: none;
+    }
+    .tracking-controls {
+      display: flex; gap: 10px; flex-wrap: wrap;
+    }
+
+    .api-info {
+      background: #e3f2fd; border: 1px solid #2196f3;
+      border-radius: 8px; padding: 15px; margin: 15px 0;
+      color: #1565c0;
+    }
+    .api-info h4 {
+      margin-bottom: 10px; color: #0d47a1;
+    }
+
+    .manual-input {
+      background: #f8f9fa; border: 1px solid #dee2e6;
+      border-radius: 8px; padding: 15px; margin: 15px 0;
+      display: none;
+    }
+    .manual-input h4 {
+      margin-bottom: 10px; color: #495057;
+    }
+    .manual-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px,1fr));
+      gap: 10px; margin-top: 10px;
+    }
+    .manual-stats input {
+      padding: 8px; border: 1px solid #ced4da;
+      border-radius: 4px; font-size: 14px;
+    }
+
+    @media (max-width: 768px) {
+      .search-form { flex-direction: column; }
+      .tracking-controls { justify-content: center; }
+      .manual-stats { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🏁 NitroType Race Tracker</h1>
+      <p>Track races, analyze performance, and climb the leaderboards!</p>
+    </div>
+
+    <div class="search-section">
+      <div class="search-form">
+        <div class="input-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" placeholder="Enter NitroType username">
+        </div>
+        <div class="input-group">
+          <label for="trackingMode">Tracking Mode</label>
+          <select id="trackingMode">
+            <option value="manual">Manual Entry</option>
+            <option value="simulation">Simulation Mode</option>
+            <option value="api">API Mode (Limited)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="api-info">
+        <h4>🔧 API Status & Information</h4>
+        <p><strong>Current Status:</strong> <span id="apiStatus">Not tested</span></p>
+        <p><strong>Note:</strong> Direct API access is limited due to CORS. Use manual or simulation mode.</p>
+      </div>
+
+      <div class="manual-input" id="manualInput">
+        <h4>📝 Manual Race Entry</h4>
+        <p>Enter your race results manually:</p>
+        <div class="manual-stats">
+          <input type="number" id="manualWPM" placeholder="WPM" min="1" max="300">
+          <input type="number" id="manualAccuracy" placeholder="Accuracy %" min="0" max="100" step="0.1">
+          <button class="btn" onclick="addManualRace()">Add Race</button>
+        </div>
+      </div>
+
+      <div class="tracking-controls">
+        <button class="btn" onclick="fetchUserStats()">Load Profile</button>
+        <button class="btn" onclick="startTracking()">Start Tracking</button>
+        <button class="btn" onclick="stopTracking()">Stop Tracking</button>
+        <button class="btn" onclick="exportData()">Export Data</button>
+        <button class="btn" onclick="testAPIConnection()">Test API</button>
+      </div>
+
+      <div id="status" class="status" style="display:none;"></div>
+    </div>
+        <div class="stats-grid">
+      <div class="stat-card">
+        <h3>📊 Current Session</h3>
+        <div class="stat-item"><span>Races This Session:</span><span class="stat-value" id="sessionRaces">0</span></div>
+        <div class="stat-item"><span>Average WPM:</span><span class="stat-value" id="sessionWPM">0</span></div>
+        <div class="stat-item"><span>Best Race:</span><span class="stat-value" id="sessionBest">0 WPM</span></div>
+        <div class="stat-item"><span>Session Time:</span><span class="stat-value" id="sessionTime">0:00</span></div>
+      </div>
+
+      <div class="stat-card">
+        <h3>🏆 Profile Stats</h3>
+        <div class="stat-item"><span>Total Races:</span><span class="stat-value" id="totalRaces">-</span></div>
+        <div class="stat-item"><span>Career WPM:</span><span class="stat-value" id="careerWPM">-</span></div>
+        <div class="stat-item"><span>Best WPM:</span><span class="stat-value" id="bestWPM">-</span></div>
+        <div class="stat-item"><span>Accuracy:</span><span class="stat-value" id="accuracy">-</span></div>
+      </div>
+
+      <div class="stat-card">
+        <h3>📈 Progress Tracking</h3>
+        <div class="stat-item"><span>Daily Goal Progress:</span><span class="stat-value" id="dailyProgress">0/50</span></div>
+        <div class="progress-bar"><div class="progress-fill" id="dailyProgressBar" style="width:0%"></div></div>
+        <div class="stat-item"><span>WPM Improvement:</span><span class="stat-value" id="wpmImprovement">+0.0</span></div>
+        <div class="stat-item"><span>Best Streak:</span><span class="stat-value" id="bestStreak">0</span></div>
+      </div>
+
+      <div class="stat-card">
+        <h3>⚡ Live Feed</h3>
+        <div class="recent-races" id="recentRaces">
+          <div class="race-item">
+            <span>No races recorded yet. Start tracking or add manual entries!</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="leaderboard">
+      <div class="leaderboard-header">
+        <h2>🏅 Session Leaderboard</h2>
+      </div>
+      <table class="leaderboard-table">
+        <thead>
+          <tr>
+            <th>Rank</th><th>Username</th><th>Races</th><th>Avg WPM</th><th>Best WPM</th><th>Improvement</th>
+          </tr>
+        </thead>
+        <tbody id="leaderboardBody">
+          <tr>
+            <td colspan="6" style="text-align:center;padding:30px;color:#999;">
+              No tracked users yet. Start tracking to populate the leaderboard!
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="progress-section">
+      <h3>🎯 Goals & Settings</h3>
+      <div class="stat-item">
+        <span>Daily Race Goal:</span>
+        <span class="stat-value">
+          <input type="number" id="dailyGoal" value="50" min="1" max="1000"
+                 style="width:60px;padding:5px;border:1px solid #ddd;border-radius:4px;">
+          races
+        </span>
+      </div>
+      <div class="stat-item">
+        <span>WPM Target:</span>
+        <span class="stat-value">
+          <input type="number" id="wpmTarget" value="80" min="10" max="300"
+                 style="width:60px;padding:5px;border:1px solid #ddd;border-radius:4px;">
+          WPM
+        </span>
+      </div>
+    </div>
+  </div>
+  <script>
+    // Global tracking objects
+    let trackingData = {
+      users: {}, sessions: {}, isTracking: false,
+      trackingInterval: null, startTime: null, apiAvailable: false
+    };
+    let sessionStats = {
+      races: 0, totalWPM: 0, bestWPM: 0,
+      startTime: Date.now(), raceHistory: [],
+      currentStreak: 0, bestStreak: 0
+    };
+
+    // Utility: show a temporary status message
+    function showStatus(message, type='success') {
+      const el = document.getElementById('status');
+      el.textContent = message;
+      el.className = `status ${type}`;
+      el.style.display = 'block';
+      setTimeout(() => el.style.display='none', 5000);
+    }
+
+    function updateSessionTime() {
+      const elapsed = Date.now() - sessionStats.startTime;
+      const m = Math.floor(elapsed/60000), s = Math.floor((elapsed%60000)/1000);
+      document.getElementById('sessionTime')
+              .textContent = `${m}:${s.toString().padStart(2,'0')}`;
+    }
+
+    // Attempt real NitroType API call, with raw AllOrigins proxy fallback
+    async function attemptAPICall(username) {
+      const proxyUrl = 'https://api.allorigins.win/raw?url=';
+      const endpoints = [
+        `https://www.nitrotype.com/api/v2/users/${username}`,
+        proxyUrl + encodeURIComponent(`https://www.nitrotype.com/api/v2/users/${username}`),
+        proxyUrl + encodeURIComponent(`https://www.nitrotype.com/racer/${username}`),
+        `https://cors-anywhere.herokuapp.com/https://www.nitrotype.com/api/v2/users/${username}`
+      ];
+
+      for (let i=0; i<endpoints.length; i++) {
+        try {
+          console.log(`Trying endpoint ${i+1}: ${endpoints[i]}`);
+          const resp = await fetch(endpoints[i], {
+            method: 'GET',
+            headers: { 'Accept':'application/json,text/html,*/*' },
+            mode: 'cors'
+          });
+          console.log('Status:', resp.status, 'Content-Type:', resp.headers.get('content-type'));
+
+          if (!resp.ok) throw new Error(`Status ${resp.status}`);
+
+          let data;
+          const ct = resp.headers.get('content-type') || '';
+          if (ct.includes('application/json')) {
+            data = await resp.json();
+          } else {
+            const text = await resp.text();
+            if (text.includes('"contents"')) {
+              const parsed = JSON.parse(text);
+              data = JSON.parse(parsed.contents || '{}');
+            } else {
+              data = parseHTMLProfile(text, username);
+            }
+          }
+
+          if (data && (data.username || data.displayName || data.success!==false)) {
+            console.log('Success with endpoint:', data);
+            return data;
+          }
+        } catch (err) {
+          console.warn(`Endpoint ${i+1} failed:`, err.message);
+          if (i === endpoints.length - 1) {
+            throw new Error('All API endpoints failed due to CORS or network errors.');
+          }
+        }
+      }
+    }
+
+    // Robust HTML-profile parser
+    function parseHTMLProfile(html, username) {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const text = doc.body.textContent || html;
+
+      const raceMatch     = text.match(/(\d{1,3}(?:,\d{3})*)\s*races?\s*played/i);
+      const wpmMatch      = text.match(/average[^\d]*(\d+(?:\.\d+)?)/i);
+      const bestMatch     = text.match(/(best|highest)[^\d]*(\d+(?:\.\d+)?)/i);
+      const accuracyMatch = text.match(/(\d+(?:\.\d+)?)%?\s*accuracy/i) ||
+                            text.match(/accuracy[^\d]*(\d+(?:\.\d+)?)/i);
+
+      return {
+        username,
+        totalRaces: raceMatch    ? parseInt(raceMatch[1].replace(/,/g,'')) : 0,
+        careerWPM:   wpmMatch     ? parseFloat(wpmMatch[1])               : 0,
+        bestWPM:     bestMatch    ? parseFloat(bestMatch[2])             : (wpmMatch ? parseFloat(wpmMatch[1]) : 0),
+        accuracy:    accuracyMatch? parseFloat(accuracyMatch[1])         : 0,
+        lastUpdated: new Date().toISOString(),
+        source:      'HTML_PARSED'
+      };
+    }
+
+    // Fetch user stats (API / simulation / manual)
+    async function fetchUserStats() {
+      const user = document.getElementById('username').value.trim();
+      if (!user) { showStatus('Please enter a username','error'); return; }
+      const mode = document.getElementById('trackingMode').value;
+
+      if (mode==='manual' || mode==='simulation') {
+        document.getElementById('manualInput').style.display = mode==='manual' ? 'block':'none';
+        loadMockProfile(user);
+        return;
+      }
+
+      showStatus('Attempting to fetch NitroType data…','tracking');
+      try {
+        const data = await attemptAPICall(user);
+        if (!data || data.success===false) throw new Error('Invalid API response');
+        updateProfileDisplay(data,user,true);
+        trackingData.users[user] = data;
+        trackingData.apiAvailable = true;
+        document.getElementById('apiStatus').textContent = 'Connected ✅';
+        showStatus(`Loaded real stats for ${user}`,'success');
+      } catch(err) {
+        console.error('API Error:', err);
+        trackingData.apiAvailable = false;
+        document.getElementById('apiStatus').textContent = 'Failed ❌';
+        showStatus(`API unavailable (${err.message}). Using simulation.`,'warning');
+        loadMockProfile(user);
+      }
+    }
+
+    // Simulation / mock profile loader
+    function loadMockProfile(user) {
+      const d = {
+        username: user,
+        totalRaces: 1200 + Math.floor(Math.random()*3000),
+        careerWPM: 60 + Math.floor(Math.random()*40),
+        bestWPM: 75 + Math.floor(Math.random()*55),
+        accuracy: (94 + Math.random()*6).toFixed(1),
+        isSimulated: true
+      };
+      updateProfileDisplay(d,user,false);
+      trackingData.users[user] = d;
+      showStatus(`Loaded simulated profile for ${user}`,'success');
+    }
+
+    // Update profile stats panel & leaderboard
+    function updateProfileDisplay(uData, user, isReal) {
+      const total = uData.totalRaces||uData.racesPlayed||0;
+      const avg   = uData.careerWPM||uData.wpm||0;
+      const best  = uData.bestWPM||uData.highestWpm||0;
+      const acc   = uData.accuracy||0;
+
+      document.getElementById('totalRaces').textContent = total.toLocaleString();
+      document.getElementById('careerWPM').textContent = `${Math.round(avg)} WPM`;
+      document.getElementById('bestWPM').textContent   = `${Math.round(best)} WPM`;
+      document.getElementById('accuracy').textContent  = `${acc}%`;
+
+      updateLeaderboard();
+    }
+
+    // Manual race entry
+    function addManualRace() {
+      const user = document.getElementById('username').value.trim();
+      const wpm  = parseFloat(document.getElementById('manualWPM').value);
+      const acc  = parseFloat(document.getElementById('manualAccuracy').value);
+      if (!user||!wpm||!acc) return showStatus('Fill in all race details','error');
+      if (wpm<1||wpm>300||acc<0||acc>100) return showStatus('Enter valid WPM/accuracy','error');
+
+      const race = {
+        username: user,
+        wpm, accuracy: acc,
+        timestamp: new Date().toLocaleTimeString(),
+        raceNumber: sessionStats.races+1,
+        isManual: true
+      };
+      addRaceToFeed(race);
+      updateSessionStats(race);
+      updateUserData(user,race);
+      updateLeaderboard();
+      document.getElementById('manualWPM').value='';
+      document.getElementById('manualAccuracy').value='';
+      showStatus(`Added race ${wpm} WPM, ${acc}%`,'success');
+    }
+
+    // Start / stop tracking & simulate races
+    function startTracking() {
+      const user = document.getElementById('username').value.trim();
+      if (!user) return showStatus('Enter username first','error');
+      if (tracking
