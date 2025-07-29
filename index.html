@@ -148,7 +148,7 @@
 
       <div id="status" class="status" style="display:none;"></div>
     </div>
-        <div class="stats-grid">
+    <div class="stats-grid">
       <div class="stat-card">
         <h3>📊 Current Session</h3>
         <div class="stat-item"><span>Races This Session:</span><span class="stat-value" id="sessionRaces">0</span></div>
@@ -410,4 +410,213 @@
     function startTracking() {
       const user = document.getElementById('username').value.trim();
       if (!user) return showStatus('Enter username first','error');
-      if (tracking
+      if (trackingData.isTracking) return showStatus('Already tracking','error');
+
+      const mode = document.getElementById('trackingMode').value;
+      trackingData.isTracking = true;
+      sessionStats.startTime = trackingData.startTime = Date.now();
+      showStatus(`Started tracking ${user} (${mode})`,'tracking');
+
+      const timer = setInterval(() => {
+        if (!trackingData.isTracking) clearInterval(timer);
+        else updateSessionTime();
+      },1000);
+
+      if (mode==='manual') {
+        document.getElementById('manualInput').style.display='block';
+        return showStatus('Manual mode active. Add races manually.','success');
+      }
+      if (mode==='simulation') {
+        trackingData.trackingInterval = setInterval(()=>simulateRace(user),15000+Math.random()*30000);
+      }
+    }
+
+    function simulateRace(user) {
+      const u = trackingData.users[user]||{careerWPM:70};
+      const variance = 15+Math.random()*20;
+      const wpm = Math.max(20, Math.round(u.careerWPM + (Math.random()-0.5)*variance));
+      const race = {
+        username: user,
+        wpm, accuracy: (92+Math.random()*8).toFixed(1),
+        timestamp: new Date().toLocaleTimeString(),
+        raceNumber: sessionStats.races+1,
+        isSimulated: true
+      };
+      addRaceToFeed(race);
+      updateSessionStats(race);
+      updateUserData(user,race);
+      updateLeaderboard();
+    }
+
+    function addRaceToFeed(race) {
+      const feed = document.getElementById('recentRaces');
+      if (feed.children.length===1 && feed.firstChild.textContent.includes('No races')) {
+        feed.innerHTML='';
+      }
+      const div = document.createElement('div');
+      div.className='race-item';
+      let badge = race.isManual ? '✏️ manual' :
+                  race.isSimulated? '🤖 simulated' : '🌐 API';
+      div.innerHTML = `
+        <div><strong>Race #${race.raceNumber}</strong> - ${race.timestamp}
+          <span style="font-size:0.8em;color:${
+            race.isManual?'#28a745':race.isSimulated?'#ffc107':'#007bff'
+          }">${badge}</span>
+        </div>
+        <div class="race-stats">
+          <span>${Math.round(race.wpm)} WPM</span>
+          <span>${race.accuracy}% ACC</span>
+        </div>`;
+      feed.insertBefore(div, feed.firstChild);
+      while (feed.children.length>10) feed.removeChild(feed.lastChild);
+    }
+
+    function updateSessionStats(r) {
+      sessionStats.races++;
+      sessionStats.totalWPM += r.wpm;
+      sessionStats.bestWPM = Math.max(sessionStats.bestWPM,r.wpm);
+      sessionStats.raceHistory.push(r);
+
+      // streak logic
+      if (sessionStats.raceHistory.length>1) {
+        const prev = sessionStats.raceHistory[sessionStats.raceHistory.length-2];
+        if (r.wpm>prev.wpm) {
+          sessionStats.currentStreak++;
+          sessionStats.bestStreak = Math.max(sessionStats.bestStreak, sessionStats.currentStreak);
+        } else {
+          sessionStats.currentStreak=0;
+        }
+      }
+
+      document.getElementById('sessionRaces').textContent = sessionStats.races;
+      document.getElementById('sessionWPM').textContent    =
+        Math.round(sessionStats.totalWPM/sessionStats.races);
+      document.getElementById('sessionBest').textContent   =
+        `${Math.round(sessionStats.bestWPM)} WPM`;
+      document.getElementById('bestStreak').textContent    = sessionStats.bestStreak;
+
+      // daily progress & improvement
+      const goal = parseInt(document.getElementById('dailyGoal').value);
+      const pct  = Math.min(100,(sessionStats.races/goal)*100);
+      document.getElementById('dailyProgress').textContent = `${sessionStats.races}/${goal}`;
+      document.getElementById('dailyProgressBar').style.width = `${pct}%`;
+
+      if (sessionStats.raceHistory.length>=5) {
+        const recent = sessionStats.raceHistory.slice(-5);
+        const older  = sessionStats.raceHistory.slice(0,Math.min(5,sessionStats.raceHistory.length-5));
+        if (older.length>0) {
+          const avgR = recent.reduce((s,r)=>s+r.wpm,0)/recent.length;
+          const avgO = older.reduce((s,r)=>s+r.wpm,0)/older.length;
+          document.getElementById('wpmImprovement').textContent =
+            `${(avgR-avgO)>=0?'+':''}${(avgR-avgO).toFixed(1)}`;
+        }
+      }
+    }
+
+    function updateUserData(user, r) {
+      if (!trackingData.users[user].sessionRaces) {
+        Object.assign(trackingData.users[user], {sessionRaces:0, sessionTotal:0, sessionBest:0});
+      }
+      const u = trackingData.users[user];
+      u.sessionRaces++;
+      u.sessionTotal += r.wpm;
+      u.sessionBest   = Math.max(u.sessionBest, r.wpm);
+      u.totalRaces++;
+    }
+
+    function updateLeaderboard() {
+      const tbody = document.getElementById('leaderboardBody');
+      const list  = Object.values(trackingData.users)
+                     .filter(u=>u.sessionRaces>0)
+                     .sort((a,b)=>b.sessionRaces - a.sessionRaces);
+      if (!list.length) return;
+      tbody.innerHTML = list.map((u,i)=>`
+        <tr>
+          <td class="rank">#${i+1}</td>
+          <td>${u.username}</td>
+          <td>${u.sessionRaces}</td>
+          <td>${Math.round(u.sessionTotal/u.sessionRaces)} WPM</td>
+          <td>${Math.round(u.sessionBest)} WPM</td>
+          <td>+${Math.round(Math.random()*10)} WPM</td>
+        </tr>
+      `).join('');
+    }
+
+    function stopTracking() {
+      if (!trackingData.isTracking) return showStatus('No active session','error');
+      trackingData.isTracking = false;
+      if (trackingData.trackingInterval) {
+        clearInterval(trackingData.trackingInterval);
+        trackingData.trackingInterval = null;
+      }
+      document.getElementById('manualInput').style.display='none';
+      showStatus('Tracking stopped','success');
+    }
+
+    function exportData() {
+      const data = {
+        session: sessionStats,
+        users: trackingData.users,
+        apiStatus: trackingData.apiAvailable,
+        exportTime: new Date().toISOString()
+      };
+      const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url;
+      a.download = `nitrotype-session-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showStatus('Session data exported','success');
+    }
+
+    async function testAPIConnection() {
+      showStatus('Testing NitroType API…','tracking');
+      document.getElementById('apiStatus').textContent = 'Testing…';
+      const testUsers = ['corndog','deroche','travis'];
+      let success = 0, lastErr = '';
+      for (const u of testUsers) {
+        try {
+          const d = await attemptAPICall(u);
+          if (d && (d.username||d.totalRaces>=0)) {
+            success++;
+            document.getElementById('apiStatus').textContent = 'Connected ✅';
+            showStatus(`✅ API OK: ${u} has ${d.totalRaces} races, ${d.careerWPM} WPM`,'success');
+            break;
+          }
+        } catch(err) {
+          lastErr = err.message;
+        }
+      }
+      if (!success) {
+        document.getElementById('apiStatus').textContent = 'Failed ❌';
+        showStatus(`❌ API Failed: ${lastErr}. Use manual/simulation.`,'warning');
+        console.log('API Test:', {testUsers, lastErr, ua: navigator.userAgent});
+      }
+    }
+
+    // Wire up events & initialize
+    document.getElementById('dailyGoal').addEventListener('change', e => {
+      const g = parseInt(e.target.value);
+      const pct = Math.min(100,(sessionStats.races/g)*100);
+      document.getElementById('dailyProgress').textContent = `${sessionStats.races}/${g}`;
+      document.getElementById('dailyProgressBar').style.width = `${pct}%`;
+    });
+    document.getElementById('trackingMode').addEventListener('change', e => {
+      document.getElementById('manualInput').style.display =
+        e.target.value==='manual' ? 'block':'none';
+    });
+    document.getElementById('manualAccuracy').addEventListener('keypress', e => {
+      if (e.key==='Enter') addManualRace();
+    });
+
+    // Start the clock
+    updateSessionTime();
+    setInterval(updateSessionTime,1000);
+
+    window.addEventListener('load', () => {
+      showStatus('🚀 NitroType Race Tracker loaded! Enter username to get started.','tracking');
+    });
+  </script>
+</body>
+</html>
